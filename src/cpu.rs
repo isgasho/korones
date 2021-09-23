@@ -37,7 +37,17 @@ impl Emu {
     fn execute<B: CpuBus>(nes: &mut Nes, instruction: Instruction) {
         // get operand
         let (_, addressing_mode) = &instruction;
-        let operand = match addressing_mode {
+        let operand = Self::get_operand::<B>(nes, *addressing_mode);
+
+        //TODO
+        match instruction {
+            (Mnemonic::ADC, _) => {}
+            _ => {}
+        }
+    }
+
+    fn get_operand<B: CpuBus>(nes: &mut Nes, addressing_mode: AddressingMode) -> u16 {
+        match addressing_mode {
             AddressingMode::Implicit => 0u16,
             AddressingMode::Accumulator => nes.cpu.a as u16,
             AddressingMode::Immediate => {
@@ -68,7 +78,7 @@ impl Emu {
             AddressingMode::AbsoluteX { oops } => {
                 let v = B::read_word(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
-                if *oops {
+                if oops {
                     //TODO
                 }
                 (v as u16).wrapping_add(nes.cpu.x as u16)
@@ -76,7 +86,7 @@ impl Emu {
             AddressingMode::AbsoluteY { oops } => {
                 let v = B::read_word(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
-                if *oops {
+                if oops {
                     //TODO
                 }
                 (v as u16).wrapping_add(nes.cpu.y as u16)
@@ -106,23 +116,13 @@ impl Emu {
                 //TODO page crossed
                 v
             }
-        };
-
-        //TODO
-        match instruction {
-            (Mnemonic::ADC, _) => {}
-            _ => {}
         }
-    }
-
-    fn get_operand(nes: &mut Nes, addressing_mode: AddressingMode) -> u8 {
-        todo!("")
     }
 }
 
 type Instruction = (Mnemonic, AddressingMode);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[rustfmt::skip]
 enum AddressingMode {
     Implicit,
