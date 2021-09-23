@@ -1,7 +1,7 @@
 use crate::nes::Nes;
 use crate::Emu;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Cpu {
     a: u8,
     x: u8,
@@ -9,35 +9,67 @@ pub struct Cpu {
     pc: u16,
 }
 
-trait CpuBus {
+pub(crate) trait CpuBus {
     fn read(nes: &mut Nes, addr: u16) -> u8;
     fn write(nes: &mut Nes, addr: u16, value: u8);
+}
 
-    fn read_word(nes: &mut Nes, addr: u16) -> u16 {
-        Self::read(nes, addr) as u16 | (Self::read(nes, addr + 1) as u16) << 8
+pub(crate) trait CpuTick {
+    fn tick(nes: &mut Nes);
+}
+
+struct CpuBusInternal<B: CpuBus, T: CpuTick> {
+    _bus: std::marker::PhantomData<B>,
+    _tick: std::marker::PhantomData<T>,
+}
+
+impl<B: CpuBus, T: CpuTick> CpuBus for CpuBusInternal<B, T> {
+    fn read(nes: &mut Nes, addr: u16) -> u8 {
+        let v = B::read(nes, addr);
+        T::tick(nes);
+        v
     }
 
-    fn read_on_indirect(nes: &mut Nes, addr: u16) -> u16 {
-        let low = Self::read(nes, addr) as u16;
-        // Reproduce 6502 bug - http://nesdev.com/6502bugs.txt
-        let high = Self::read(nes, (addr & 0xFF00) | ((addr + 1) & 0x00FF)) as u16;
-        low | (high << 8)
+    fn write(nes: &mut Nes, addr: u16, value: u8) {
+        //TODO OAMDMA
+        B::write(nes, addr, value);
+        T::tick(nes);
     }
 }
 
+fn read<B: CpuBus, T: CpuTick>(nes: &mut Nes, addr: u16) -> u8 {
+    CpuBusInternal::<B, T>::read(nes, addr)
+}
+
+fn write<B: CpuBus, T: CpuTick>(nes: &mut Nes, addr: u16, value: u8) {
+    CpuBusInternal::<B, T>::write(nes, addr, value)
+}
+
+fn read_word<B: CpuBus, T: CpuTick>(nes: &mut Nes, addr: u16) -> u16 {
+    CpuBusInternal::<B, T>::read(nes, addr) as u16
+        | (CpuBusInternal::<B, T>::read(nes, addr + 1) as u16) << 8
+}
+
+fn read_on_indirect<B: CpuBus, T: CpuTick>(nes: &mut Nes, addr: u16) -> u16 {
+    let low = CpuBusInternal::<B, T>::read(nes, addr) as u16;
+    // Reproduce 6502 bug - http://nesdev.com/6502bugs.txt
+    let high = CpuBusInternal::<B, T>::read(nes, (addr & 0xFF00) | ((addr + 1) & 0x00FF)) as u16;
+    low | (high << 8)
+}
+
 impl Emu {
-    fn cpu_step<B: CpuBus>(nes: &mut Nes) {
-        let opcode = B::read(nes, nes.cpu.pc);
+    fn cpu_step<B: CpuBus, T: CpuTick>(nes: &mut Nes) {
+        let opcode = read::<B, T>(nes, nes.cpu.pc);
         nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
 
         let instruction = decode(opcode);
-        Self::execute::<B>(nes, instruction);
+        Self::execute::<B, T>(nes, instruction);
     }
 
-    fn execute<B: CpuBus>(nes: &mut Nes, instruction: Instruction) {
+    fn execute<B: CpuBus, T: CpuTick>(nes: &mut Nes, instruction: Instruction) {
         // get operand
         let (_, addressing_mode) = &instruction;
-        let operand = Self::get_operand::<B>(nes, *addressing_mode);
+        let operand = Self::get_operand::<B, T>(nes, *addressing_mode);
 
         //TODO
         match instruction {
@@ -46,7 +78,7 @@ impl Emu {
         }
     }
 
-    fn get_operand<B: CpuBus>(nes: &mut Nes, addressing_mode: AddressingMode) -> u16 {
+    fn get_operand<B: CpuBus, T: CpuTick>(nes: &mut Nes, addressing_mode: AddressingMode) -> u16 {
         match addressing_mode {
             AddressingMode::Implicit => 0u16,
             AddressingMode::Accumulator => nes.cpu.a as u16,
@@ -56,68 +88,83 @@ impl Emu {
                 pc
             }
             AddressingMode::ZeroPage => {
-                let v = B::read(nes, nes.cpu.pc);
+                let v = read::<B, T>(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
                 v as u16
             }
             AddressingMode::ZeroPageX => {
-                let v = (B::read(nes, nes.cpu.pc) as u16 + nes.cpu.x as u16) & 0xFF;
+                let v = (read::<B, T>(nes, nes.cpu.pc) as u16 + nes.cpu.x as u16) & 0xFF;
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
                 v as u16
             }
             AddressingMode::ZeroPageY => {
-                let v = (B::read(nes, nes.cpu.pc) as u16 + nes.cpu.y as u16) & 0xFF;
+                let v = (read::<B, T>(nes, nes.cpu.pc) as u16 + nes.cpu.y as u16) & 0xFF;
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
                 v as u16
             }
             AddressingMode::Absolute => {
-                let v = B::read_word(nes, nes.cpu.pc);
+                let v = read_word::<B, T>(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
                 v as u16
             }
             AddressingMode::AbsoluteX { oops } => {
-                let v = B::read_word(nes, nes.cpu.pc);
+                let v = read_word::<B, T>(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
                 if oops {
-                    //TODO
+                    if page_crossed(nes.cpu.x as u16, v) {
+                        T::tick(nes);
+                    }
+                } else {
+                    T::tick(nes);
                 }
                 (v as u16).wrapping_add(nes.cpu.x as u16)
             }
             AddressingMode::AbsoluteY { oops } => {
-                let v = B::read_word(nes, nes.cpu.pc);
+                let v = read_word::<B, T>(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
                 if oops {
-                    //TODO
+                    if page_crossed(nes.cpu.y as u16, v) {
+                        T::tick(nes);
+                    }
+                } else {
+                    T::tick(nes);
                 }
                 (v as u16).wrapping_add(nes.cpu.y as u16)
             }
             AddressingMode::Relative => {
-                let v = B::read(nes, nes.cpu.pc);
+                let v = read::<B, T>(nes, nes.cpu.pc);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
                 v as u16
             }
             AddressingMode::Indirect => {
-                let m = B::read_word(nes, nes.cpu.pc);
-                let v = B::read_on_indirect(nes, m);
+                let m = read_word::<B, T>(nes, nes.cpu.pc);
+                let v = read_on_indirect::<B, T>(nes, m);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
                 v
             }
             AddressingMode::IndexedIndirect => {
-                let m = B::read(nes, nes.cpu.pc);
-                let v = B::read_on_indirect(nes, (m.wrapping_add(nes.cpu.x) & 0xFF) as u16);
+                let m = read::<B, T>(nes, nes.cpu.pc);
+                let v = read_on_indirect::<B, T>(nes, (m.wrapping_add(nes.cpu.x) & 0xFF) as u16);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
-                //TODO cycle
+                T::tick(nes);
                 v
             }
             AddressingMode::IndirectIndexed => {
-                let m = B::read(nes, nes.cpu.pc);
-                let v = B::read_on_indirect(nes, m as u16).wrapping_add(nes.cpu.y as u16);
+                let m = read::<B, T>(nes, nes.cpu.pc);
+                let n = read_on_indirect::<B, T>(nes, m as u16);
+                let v = n.wrapping_add(nes.cpu.y as u16);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
-                //TODO page crossed
+                if page_crossed(nes.cpu.y as u16, n) {
+                    T::tick(nes);
+                }
                 v
             }
         }
     }
+}
+
+fn page_crossed(a: u16, b: u16) -> bool {
+    a.wrapping_add(b) & 0xFF00 != (b & 0xFF00)
 }
 
 type Instruction = (Mnemonic, AddressingMode);
@@ -352,5 +399,218 @@ fn decode(opcode: u8) -> Instruction {
         0x98 => (Mnemonic::TYA, AddressingMode::Implicit),
 
         _ => (Mnemonic::NOP, AddressingMode::Implicit),
+    }
+}
+
+#[cfg(test)]
+mod addressing_mode_tests {
+    use super::*;
+
+    struct CpuTickMock {}
+    impl CpuTick for CpuTickMock {
+        fn tick(nes: &mut Nes) {
+            nes.cpu_cycles = nes.cpu_cycles.wrapping_add(1);
+        }
+    }
+
+    struct CpuBusMock {}
+    impl CpuBus for CpuBusMock {
+        fn read(nes: &mut Nes, addr: u16) -> u8 {
+            nes.wram[addr as usize]
+        }
+        fn write(nes: &mut Nes, addr: u16, value: u8) {
+            nes.wram[addr as usize] = value
+        }
+    }
+
+    #[test]
+    fn implicit() {
+        let mut nes = Nes::new();
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::Implicit);
+        assert_eq!(v, 0);
+        assert_eq!(nes.cpu_cycles, 0);
+    }
+
+    #[test]
+    fn accumulator() {
+        let mut nes = Nes::new();
+        nes.cpu.a = 0xFB;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::Accumulator);
+        assert_eq!(v, 0xFB);
+        assert_eq!(nes.cpu_cycles, 0);
+    }
+
+    #[test]
+    fn immediate() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x8234;
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::Immediate);
+        assert_eq!(v, 0x8234);
+        assert_eq!(nes.cpu_cycles, 0);
+    }
+
+    #[test]
+    fn zero_page() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x0414;
+        nes.wram[0x0414] = 0x91;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::ZeroPage);
+        assert_eq!(v, 0x91);
+        assert_eq!(nes.cpu_cycles, 1);
+    }
+
+    #[test]
+    fn zero_page_x() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x0100;
+        nes.wram[0x0100] = 0x80;
+        nes.cpu.x = 0x93;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::ZeroPageX);
+        assert_eq!(v, 0x13);
+        assert_eq!(nes.cpu_cycles, 1);
+    }
+
+    #[test]
+    fn zero_page_y() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x0423;
+        nes.wram[0x0423] = 0x36;
+        nes.cpu.y = 0xF1;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::ZeroPageY);
+        assert_eq!(v, 0x27);
+        assert_eq!(nes.cpu_cycles, 1);
+    }
+
+    #[test]
+    fn absolute() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x0423;
+        nes.wram[0x0423] = 0x36;
+        nes.wram[0x0424] = 0xF0;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::Absolute);
+        assert_eq!(v, 0xF036);
+        assert_eq!(nes.cpu_cycles, 2);
+    }
+
+    #[test]
+    fn absolute_x() {
+        #[rustfmt::skip]
+        let cases = [
+            ("no oops",               false, 0x31, 0xF067, 3),
+            ("oops/not page crossed", true,  0x31, 0xF067, 2),
+            ("oops/page crossed",     true,  0xF0, 0xF126, 3),
+        ];
+
+        for (name, oops, x, expected_operand, expected_cycles) in cases {
+            let mut nes = Nes::new();
+            nes.cpu.pc = 0x0423;
+            nes.wram[0x0423] = 0x36;
+            nes.wram[0x0424] = 0xF0;
+
+            nes.cpu.x = x;
+
+            let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(
+                &mut nes,
+                AddressingMode::AbsoluteX { oops },
+            );
+            assert_eq!(v, expected_operand, "{}", name);
+            assert_eq!(nes.cpu_cycles, expected_cycles, "{}", name);
+        }
+    }
+
+    #[test]
+    fn absolute_y() {
+        #[rustfmt::skip]
+        let cases = [
+            ("no oops",               false, 0x31, 0xF067, 3),
+            ("oops/not page crossed", true,  0x31, 0xF067, 2),
+            ("oops/page crossed",     true,  0xF0, 0xF126, 3),
+        ];
+
+        for (name, oops, y, expected_operand, expected_cycles) in cases {
+            let mut nes = Nes::new();
+            nes.cpu.pc = 0x0423;
+            nes.wram[0x0423] = 0x36;
+            nes.wram[0x0424] = 0xF0;
+
+            nes.cpu.y = y;
+
+            let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(
+                &mut nes,
+                AddressingMode::AbsoluteY { oops },
+            );
+            assert_eq!(v, expected_operand, "{}", name);
+            assert_eq!(nes.cpu_cycles, expected_cycles, "{}", name);
+        }
+    }
+
+    #[test]
+    fn relative() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x0414;
+        nes.wram[0x0414] = 0x91;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::Relative);
+        assert_eq!(v, 0x91);
+        assert_eq!(nes.cpu_cycles, 1);
+    }
+
+    #[test]
+    fn indirect() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x020F;
+        nes.wram[0x020F] = 0x10;
+        nes.wram[0x0210] = 0x03;
+        nes.wram[0x0310] = 0x9F;
+
+        let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::Indirect);
+        assert_eq!(v, 0x9F);
+        assert_eq!(nes.cpu_cycles, 4);
+    }
+
+    #[test]
+    fn indexed_indirect() {
+        let mut nes = Nes::new();
+        nes.cpu.pc = 0x020F;
+        nes.wram[0x020F] = 0xF0;
+        nes.cpu.x = 0x95;
+        nes.wram[0x0085] = 0x12;
+        nes.wram[0x0086] = 0x90;
+
+        let v =
+            Emu::get_operand::<CpuBusMock, CpuTickMock>(&mut nes, AddressingMode::IndexedIndirect);
+        assert_eq!(v, 0x9012);
+        assert_eq!(nes.cpu_cycles, 4);
+    }
+
+    #[test]
+    fn indirect_indexed() {
+        #[rustfmt::skip]
+        let cases = [
+            ("not page crossed", 0x83, 0x9095, 3),
+            ("page crossed",     0xF3, 0x9105, 4),
+        ];
+
+        for (name, y, expected_operand, expected_cycles) in cases {
+            let mut nes = Nes::new();
+            nes.cpu.pc = 0x020F;
+            nes.wram[0x020F] = 0xF0;
+            nes.wram[0x00F0] = 0x12;
+            nes.wram[0x00F1] = 0x90;
+            nes.cpu.y = y;
+
+            let v = Emu::get_operand::<CpuBusMock, CpuTickMock>(
+                &mut nes,
+                AddressingMode::IndirectIndexed,
+            );
+            assert_eq!(v, expected_operand, "{}", name);
+            assert_eq!(nes.cpu_cycles, expected_cycles, "{}", name);
+        }
     }
 }
