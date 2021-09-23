@@ -5,11 +5,96 @@ impl Emu {
 
     fn cpu_step<B: CpuBus>(nes: &mut Nes) {
         let opcode = B::read(nes, nes.cpu.pc);
+        nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+
         let instruction = decode(opcode);
-        Self::execute(nes, instruction);
+        Self::execute::<B>(nes, instruction);
     }
 
-    fn execute(nes: &mut Nes, instruction: Instruction) {}
+    fn execute<B: CpuBus>(nes: &mut Nes, instruction: Instruction) {
+        // get operand
+        let (_, addressing_mode) = &instruction;
+        let operand = match addressing_mode {
+            AddressingMode::Implicit => 0u16,
+            AddressingMode::Accumulator => nes.cpu.a as u16,
+            AddressingMode::Immediate => {
+                let pc = nes.cpu.pc;
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                pc
+            }
+            AddressingMode::ZeroPage => {
+                let v = B::read(nes, nes.cpu.pc);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                v as u16
+            }
+            AddressingMode::ZeroPageX => {
+                let v = (B::read(nes, nes.cpu.pc) as u16 + nes.cpu.x as u16) & 0xFF;
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                v as u16
+            }
+            AddressingMode::ZeroPageY => {
+                let v = (B::read(nes, nes.cpu.pc) as u16 + nes.cpu.y as u16) & 0xFF;
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                v as u16
+            }
+            AddressingMode::Absolute => {
+                let v = B::read_word(nes, nes.cpu.pc);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
+                v as u16
+            }
+            AddressingMode::AbsoluteX { oops } => {
+                let v = B::read_word(nes, nes.cpu.pc);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
+                if *oops {
+                    //TODO
+                }
+                (v as u16).wrapping_add(nes.cpu.x as u16)
+            }
+            AddressingMode::AbsoluteY { oops } => {
+                let v = B::read_word(nes, nes.cpu.pc);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
+                if *oops {
+                    //TODO
+                }
+                (v as u16).wrapping_add(nes.cpu.y as u16)
+            }
+            AddressingMode::Relative => {
+                let v = B::read(nes, nes.cpu.pc);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                v as u16
+            }
+            AddressingMode::Indirect => {
+                let m = B::read_word(nes, nes.cpu.pc);
+                let v = B::read_on_indirect(nes, m);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(2);
+                v
+            }
+            AddressingMode::IndexedIndirect => {
+                let m = B::read(nes, nes.cpu.pc);
+                let v = B::read_on_indirect(nes, (m.wrapping_add(nes.cpu.x) & 0xFF) as u16);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                //TODO cycle
+                v
+            }
+            AddressingMode::IndirectIndexed => {
+                let m = B::read(nes, nes.cpu.pc);
+                let v = B::read_on_indirect(nes, m as u16).wrapping_add(nes.cpu.y as u16);
+                nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
+                //TODO page crossed
+                v
+            }
+        };
+
+        //TODO
+        match instruction {
+            (Mnemonic::ADC, _) => {}
+            _ => {}
+        }
+    }
+
+    fn get_operand(nes: &mut Nes, addressing_mode: AddressingMode) -> u8 {
+        todo!("")
+    }
 }
 
 #[derive(Debug)]
@@ -19,12 +104,26 @@ struct Nes {
 
 #[derive(Debug)]
 struct Cpu {
+    a: u8,
+    x: u8,
+    y: u8,
     pc: u16,
 }
 
 trait CpuBus {
     fn read(nes: &mut Nes, addr: u16) -> u8;
     fn write(nes: &mut Nes, addr: u16, value: u8);
+
+    fn read_word(nes: &mut Nes, addr: u16) -> u16 {
+        Self::read(nes, addr) as u16 | (Self::read(nes, addr + 1) as u16) << 8
+    }
+
+    fn read_on_indirect(nes: &mut Nes, addr: u16) -> u16 {
+        let low = Self::read(nes, addr) as u16;
+        // Reproduce 6502 bug - http://nesdev.com/6502bugs.txt
+        let high = Self::read(nes, (addr & 0xFF00) | ((addr + 1) & 0x00FF)) as u16;
+        low | (high << 8)
+    }
 }
 
 type Instruction = (Mnemonic, AddressingMode);
