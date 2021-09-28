@@ -206,15 +206,15 @@ impl Emu {
             }
 
             (Mnemonic::AND, _) => {
-                nes.cpu.a = nes.cpu.a & read::<B, T>(nes, operand);
+                nes.cpu.a &= read::<B, T>(nes, operand);
                 nes.cpu.p.set_zn(nes.cpu.a);
             }
             (Mnemonic::EOR, _) => {
-                nes.cpu.a = nes.cpu.a ^ read::<B, T>(nes, operand);
+                nes.cpu.a ^= read::<B, T>(nes, operand);
                 nes.cpu.p.set_zn(nes.cpu.a);
             }
             (Mnemonic::ORA, _) => {
-                nes.cpu.a = nes.cpu.a | read::<B, T>(nes, operand);
+                nes.cpu.a |= read::<B, T>(nes, operand);
                 nes.cpu.p.set_zn(nes.cpu.a);
             }
             (Mnemonic::BIT, _) => {
