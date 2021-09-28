@@ -593,6 +593,7 @@ enum AddressingMode {
 
 #[derive(Debug)]
 #[rustfmt::skip]
+#[allow(dead_code)]
 enum Mnemonic {
     // Load/Store Operations
     LDA, LDX, LDY, STA, STX, STY,
