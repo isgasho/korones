@@ -7,5 +7,6 @@ mod nes;
 pub struct Emu {}
 
 impl Emu {
+    #[allow(dead_code)]
     fn run_frame() {}
 }
