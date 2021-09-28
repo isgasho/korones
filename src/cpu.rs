@@ -25,7 +25,9 @@ pub struct Cpu {
 impl Emu {
     #[allow(dead_code)]
     fn cpu_step<B: CpuBus, T: CpuTick>(nes: &mut Nes) {
+        use addressing_mode::get_operand;
         use decoder::decode;
+        use instruction::execute;
 
         let opcode = read::<B, T>(nes, nes.cpu.pc);
         nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
@@ -33,9 +35,9 @@ impl Emu {
         let inst = decode(opcode);
 
         let (_, addressing_mode) = &inst;
-        let operand = addressing_mode::get_operand::<B, T>(nes, *addressing_mode);
+        let operand = get_operand::<B, T>(nes, *addressing_mode);
 
-        instruction::execute::<B, T>(nes, inst, operand);
+        execute::<B, T>(nes, inst, operand);
     }
 }
 
