@@ -724,7 +724,7 @@ fn decode(opcode: u8) -> Instruction {
 
         0xA2 => (Mnemonic::LDX, AddressingMode::Immediate),
         0xA6 => (Mnemonic::LDX, AddressingMode::ZeroPage),
-        0xB6 => (Mnemonic::LDX, AddressingMode::ZeroPageX),
+        0xB6 => (Mnemonic::LDX, AddressingMode::ZeroPageY),
         0xAE => (Mnemonic::LDX, AddressingMode::Absolute),
         0xBE => (Mnemonic::LDX, AddressingMode::AbsoluteY { oops: true }),
 
@@ -793,7 +793,7 @@ fn decode(opcode: u8) -> Instruction {
         0x91 => (Mnemonic::STA, AddressingMode::ZeroPage),
 
         0x86 => (Mnemonic::STX, AddressingMode::ZeroPage),
-        0x96 => (Mnemonic::STX, AddressingMode::ZeroPageX),
+        0x96 => (Mnemonic::STX, AddressingMode::ZeroPageY),
         0x8E => (Mnemonic::STX, AddressingMode::Absolute),
         0x84 => (Mnemonic::STY, AddressingMode::ZeroPage),
         0x94 => (Mnemonic::STY, AddressingMode::ZeroPageX),
