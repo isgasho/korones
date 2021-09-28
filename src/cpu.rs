@@ -551,7 +551,7 @@ impl Emu {
             }
             AddressingMode::IndexedIndirect => {
                 let m = read::<B, T>(nes, nes.cpu.pc);
-                let v = read_on_indirect::<B, T>(nes, (m.wrapping_add(nes.cpu.x) & 0xFF) as u16);
+                let v = read_on_indirect::<B, T>(nes, m.wrapping_add(nes.cpu.x) as u16);
                 nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
                 T::tick(nes);
                 v
