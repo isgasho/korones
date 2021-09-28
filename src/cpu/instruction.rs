@@ -365,3 +365,10 @@ fn branch<B: CpuBus, T: CpuTick>(nes: &mut Nes, operand: u16) {
     }
     nes.cpu.pc = nes.cpu.pc.wrapping_add(operand);
 }
+
+impl Status {
+    fn set_zn(&mut self, v: u8) {
+        self.set(Self::Z, v == 0);
+        self.set(Self::N, v & 0x80 == 0x80);
+    }
+}

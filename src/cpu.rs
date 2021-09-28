@@ -58,13 +58,6 @@ bitflags! {
     }
 }
 
-impl Status {
-    fn set_zn(&mut self, v: u8) {
-        self.set(Self::Z, v == 0);
-        self.set(Self::N, v & 0x80 == 0x80);
-    }
-}
-
 pub(crate) trait CpuBus {
     fn read(nes: &mut Nes, addr: u16) -> u8;
     fn write(nes: &mut Nes, addr: u16, value: u8);
