@@ -95,8 +95,7 @@ fn push_stack<B: CpuBus, T: CpuTick>(nes: &mut Nes, v: u8) {
 
 fn pull_stack<B: CpuBus, T: CpuTick>(nes: &mut Nes) -> u8 {
     nes.cpu.s = nes.cpu.s.wrapping_add(1);
-    let m = read::<B, T>(nes, nes.cpu.s as u16);
-    m
+    read::<B, T>(nes, nes.cpu.s as u16)
 }
 
 fn push_stack_word<B: CpuBus, T: CpuTick>(nes: &mut Nes, v: u16) {
