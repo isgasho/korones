@@ -8,6 +8,7 @@ pub(crate) struct Nes {
 }
 
 impl Nes {
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self {
             cpu: Default::default(),
