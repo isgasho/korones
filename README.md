@@ -6,10 +6,10 @@
 
 ### CPU
 
-- [ ] Registers
+- [x] Registers
 - [ ] Memory map
-- [ ] Addressing modes
-- [ ] Official operations
+- [x] Addressing modes
+- [x] Official operations
 - [ ] Unofficial operations
 - [ ] Interrupt handlers
 - [ ] Disassembler + nestest logging
