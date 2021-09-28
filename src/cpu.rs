@@ -126,13 +126,14 @@ impl Emu {
         nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
 
         let instruction = decode(opcode);
-        Self::execute::<B, T>(nes, instruction);
-    }
 
-    fn execute<B: CpuBus, T: CpuTick>(nes: &mut Nes, instruction: Instruction) {
         let (_, addressing_mode) = &instruction;
         let operand = addressing_mode::get_operand::<B, T>(nes, *addressing_mode);
 
+        Self::execute::<B, T>(nes, instruction, operand);
+    }
+
+    fn execute<B: CpuBus, T: CpuTick>(nes: &mut Nes, instruction: Instruction, operand: u16) {
         match instruction {
             (Mnemonic::LDA, _) => {
                 nes.cpu.a = read::<B, T>(nes, operand);
