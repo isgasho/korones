@@ -762,11 +762,11 @@ fn decode(opcode: u8) -> Instruction {
         0x2E => (Mnemonic::ROL, AddressingMode::Absolute),
         0x3E => (Mnemonic::ROL, AddressingMode::AbsoluteX { oops: false }),
 
-        0x6A => (Mnemonic::ROL, AddressingMode::Accumulator),
-        0x66 => (Mnemonic::ROL, AddressingMode::ZeroPage),
-        0x76 => (Mnemonic::ROL, AddressingMode::ZeroPageX),
-        0x6E => (Mnemonic::ROL, AddressingMode::Absolute),
-        0x7E => (Mnemonic::ROL, AddressingMode::AbsoluteX { oops: false }),
+        0x6A => (Mnemonic::ROR, AddressingMode::Accumulator),
+        0x66 => (Mnemonic::ROR, AddressingMode::ZeroPage),
+        0x76 => (Mnemonic::ROR, AddressingMode::ZeroPageX),
+        0x6E => (Mnemonic::ROR, AddressingMode::Absolute),
+        0x7E => (Mnemonic::ROR, AddressingMode::AbsoluteX { oops: false }),
 
         0x40 => (Mnemonic::RTI, AddressingMode::Implicit),
         0x60 => (Mnemonic::RTS, AddressingMode::Implicit),
