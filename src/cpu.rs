@@ -119,6 +119,7 @@ fn branch<B: CpuBus, T: CpuTick>(nes: &mut Nes, operand: u16) {
 }
 
 impl Emu {
+    #[allow(dead_code)]
     fn cpu_step<B: CpuBus, T: CpuTick>(nes: &mut Nes) {
         let opcode = read::<B, T>(nes, nes.cpu.pc);
         nes.cpu.pc = nes.cpu.pc.wrapping_add(1);
