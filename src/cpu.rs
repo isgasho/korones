@@ -593,7 +593,7 @@ enum AddressingMode {
 
 #[derive(Debug)]
 #[rustfmt::skip]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::upper_case_acronyms)]
 enum Mnemonic {
     // Load/Store Operations
     LDA, LDX, LDY, STA, STX, STY,
