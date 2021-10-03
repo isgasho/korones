@@ -17,3 +17,9 @@ impl Nes {
         }
     }
 }
+
+#[derive(Debug)]
+pub(crate) enum Mirroring {
+    Horizontal,
+    Vertical,
+}
