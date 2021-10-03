@@ -8,6 +8,7 @@ extern crate anyhow;
 extern crate assert_matches;
 
 mod cpu;
+mod mapper;
 mod nes;
 mod rom;
 
